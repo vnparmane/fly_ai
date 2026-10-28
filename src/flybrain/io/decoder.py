@@ -47,6 +47,7 @@ class Decoder:
         """Clear rolling spike window."""
         self._history = []
         self._current_time_ms = 0.0
+        self.last_rates = {"move_left": 0.0, "move_right": 0.0, "fire": 0.0}
 
     def __call__(self, batch: SpikeBatch) -> np.ndarray:
         # Append incoming spikes with absolute timestamps
@@ -77,6 +78,12 @@ class Decoder:
         rate_left = count_left / (self.size_left * window_sec)
         rate_right = count_right / (self.size_right * window_sec)
         rate_fire = count_fire / (self.size_fire * window_sec)
+
+        self.last_rates = {
+            "move_left": float(rate_left),
+            "move_right": float(rate_right),
+            "fire": float(rate_fire),
+        }
 
         thresh = self.cfg.thresh_hz
         margin = self.cfg.margin_hz
