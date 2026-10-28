@@ -2,11 +2,16 @@
 
 import argparse
 import logging
+import os
 from pathlib import Path
 import sys
 import time
 import numpy as np
 import yaml
+
+# If running interactive play, remove any inherited SDL_VIDEODRIVER=dummy from session
+if "--headless-check" not in sys.argv:
+    os.environ.pop("SDL_VIDEODRIVER", None)
 
 from flybrain.brain.backend_brian2 import Brian2Brain
 from flybrain.brain.lif import LIFParams
@@ -17,7 +22,7 @@ from flybrain.control.base import Controller
 from flybrain.control.brain_ctrl import BrainController
 from flybrain.control.heuristic import HeuristicController
 from flybrain.control.random_ctrl import RandomController
-from flybrain.control.shuffle import resample_io, shuffle_connectome
+from flybrain.control.shuffle import shuffle_connectome
 from flybrain.data.connectome import load_connectome
 from flybrain.env.invaders import InvadersConfig, SpaceInvadersEnv
 from flybrain.env.render import ArcadeViewer
@@ -29,98 +34,140 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message
 logger = logging.getLogger("flybrain.play")
 
 
-def load_controllers_dict(conn, io_spec, cfg) -> dict[str, Controller]:
-    """Pre-build controllers dictionary for fast live-switching."""
-    controllers: dict[str, Controller] = {
-        "random": RandomController(p=float(cfg["eval"]["random_p"])),
-        "heuristic": HeuristicController(fire_thresh=float(cfg["eval"]["heuristic_fire_thresh"])),
-    }
+class ControllerManager:
+    """Manages on-demand lazy initialization of controllers."""
 
-    # Extract subcircuit for brain-based controllers (1500 neurons)
-    logger.info("Extracting subcircuit for live brain controllers...")
-    all_in = np.concatenate(list(io_spec.input_groups.values()))
-    all_out = np.concatenate(list(io_spec.output_groups.values()))
-    sub_conn, sub_to_full = extract_subcircuit(conn, all_in, all_out, max_hops=3, max_neurons=1500)
-    full_to_sub = {int(full): sub for sub, full in enumerate(sub_to_full)}
+    def __init__(self, conn, cfg, viewer: ArcadeViewer | None = None) -> None:
+        self.conn = conn
+        self.cfg = cfg
+        self.viewer = viewer
+        self.cache: dict[str, Controller] = {}
+        self.io_cache: dict[str, object] = {}
 
-    io_sub = load_io_spec("data/io_spec.json")
-    for k in io_sub.input_groups:
-        io_sub.input_groups[k] = np.array([full_to_sub[i] for i in io_spec.input_groups[k] if i in full_to_sub], dtype=np.int32)
-    for k in io_sub.output_groups:
-        io_sub.output_groups[k] = np.array([full_to_sub[i] for i in io_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
+    def get(self, name: str) -> tuple[Controller, object]:
+        if name in self.cache:
+            return self.cache[name], self.io_cache[name]
 
-    enc_cfg = EncoderConfig(
-        max_rate_hz=float(cfg["encoder"]["max_rate_hz"]),
-        dx_range=float(cfg["encoder"]["dx_range"]),
-        align_sigma=float(cfg["encoder"]["align_sigma"]),
-    )
-    dec_cfg = DecoderConfig(
-        window_ms=float(cfg["decoder"]["window_ms"]),
-        margin_hz=float(cfg["decoder"]["margin_hz"]),
-        thresh_hz={k: float(v) for k, v in cfg["decoder"]["thresh_hz"].items()},
-    )
+        if self.viewer:
+            self.viewer.show_loading(f"Loading '{name.upper()}' Controller...", "Initializing Neural Subcircuit...")
 
-    # 1. Real Brain Controller
-    brain_core = Brian2Brain(sub_conn, LIFParams())
-    enc = Encoder(io_sub, enc_cfg)
-    dec = Decoder(io_sub, dec_cfg)
-    controllers["brain"] = BrainController(brain_core, enc, dec, step_ms=float(cfg["eval"]["step_ms"]))
-
-    # 2. Shuffled Brain Controller
-    shuffled_sub = shuffle_connectome(sub_conn, seed=42, n_swaps_factor=5)
-    shuffled_brain = Brian2Brain(shuffled_sub, LIFParams())
-    controllers["shuffled"] = BrainController(
-        shuffled_brain,
-        Encoder(io_sub, enc_cfg),
-        Decoder(io_sub, dec_cfg),
-        step_ms=float(cfg["eval"]["step_ms"]),
-    )
-
-    # 3. FAFB VNC Descending Motor Controller
-    vnc_spec = extract_fafb_vnc_spec(conn)
-    vnc_io_sub = extract_fafb_vnc_spec(conn)
-    for k in vnc_io_sub.input_groups:
-        vnc_io_sub.input_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.input_groups[k] if i in full_to_sub], dtype=np.int32)
-    for k in vnc_io_sub.output_groups:
-        vnc_io_sub.output_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
-
-    vnc_pool = VNCMotorPool(vnc_io_sub, VNCConfig())
-    controllers["vnc"] = VNCBrainController(brain_core, enc, vnc_pool, step_ms=float(cfg["eval"]["step_ms"]))
-
-    # 4. Trained Brain Controller (with R-STDP weights)
-    chk_path = Path("data/checkpoints/trained_brain.npz")
-    if chk_path.exists():
-        logger.info("Loading trained brain checkpoint...")
-        all_in_vnc = np.concatenate(list(vnc_spec.input_groups.values()))
-        all_out_vnc = np.concatenate(list(vnc_spec.output_groups.values()))
-        sub_vnc_conn, sub_to_full_vnc = extract_subcircuit(conn, all_in_vnc, all_out_vnc, max_hops=3, max_neurons=1500)
-        full_to_sub_vnc = {int(full): sub for sub, full in enumerate(sub_to_full_vnc)}
-
-        vnc_io_trained = extract_fafb_vnc_spec(conn)
-        for k in vnc_io_trained.input_groups:
-            vnc_io_trained.input_groups[k] = np.array([full_to_sub_vnc[i] for i in vnc_spec.input_groups[k] if i in full_to_sub_vnc], dtype=np.int32)
-        for k in vnc_io_trained.output_groups:
-            vnc_io_trained.output_groups[k] = np.array([full_to_sub_vnc[i] for i in vnc_spec.output_groups[k] if i in full_to_sub_vnc], dtype=np.int32)
-
-        trained_brain_core = Brian2Brain(sub_vnc_conn, LIFParams())
-        plast = RSTDPPlasticity(trained_brain_core)
-        plast.load_weights(chk_path)
-        enc_trained = Encoder(vnc_io_trained, enc_cfg)
-        vnc_pool_trained = VNCMotorPool(vnc_io_trained, VNCConfig())
-        controllers["trained_brain"] = VNCBrainController(
-            trained_brain_core, enc_trained, vnc_pool_trained, step_ms=float(cfg["eval"]["step_ms"])
+        enc_cfg = EncoderConfig(
+            max_rate_hz=float(self.cfg["encoder"]["max_rate_hz"]),
+            dx_range=float(self.cfg["encoder"]["dx_range"]),
+            align_sigma=float(self.cfg["encoder"]["align_sigma"]),
         )
+        dec_cfg = DecoderConfig(
+            window_ms=float(self.cfg["decoder"]["window_ms"]),
+            margin_hz=float(self.cfg["decoder"]["margin_hz"]),
+            thresh_hz={k: float(v) for k, v in self.cfg["decoder"]["thresh_hz"].items()},
+        )
+        step_ms = float(self.cfg["eval"]["step_ms"])
 
-    return controllers, io_sub
+        if name == "random":
+            ctrl = RandomController(p=float(self.cfg["eval"]["random_p"]))
+            io_spec = load_io_spec("data/io_spec.json")
+
+        elif name == "heuristic":
+            ctrl = HeuristicController(fire_thresh=float(self.cfg["eval"]["heuristic_fire_thresh"]))
+            io_spec = load_io_spec("data/io_spec.json")
+
+        elif name == "brain":
+            io_spec = load_io_spec("data/io_spec.json")
+            all_in = np.concatenate(list(io_spec.input_groups.values()))
+            all_out = np.concatenate(list(io_spec.output_groups.values()))
+            sub_conn, sub_to_full = extract_subcircuit(self.conn, all_in, all_out, max_hops=3, max_neurons=1500)
+            full_to_sub = {int(full): sub for sub, full in enumerate(sub_to_full)}
+
+            io_sub = load_io_spec("data/io_spec.json")
+            for k in io_sub.input_groups:
+                io_sub.input_groups[k] = np.array([full_to_sub[i] for i in io_spec.input_groups[k] if i in full_to_sub], dtype=np.int32)
+            for k in io_sub.output_groups:
+                io_sub.output_groups[k] = np.array([full_to_sub[i] for i in io_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
+
+            brain_core = Brian2Brain(sub_conn, LIFParams())
+            ctrl = BrainController(brain_core, Encoder(io_sub, enc_cfg), Decoder(io_sub, dec_cfg), step_ms=step_ms)
+            io_spec = io_sub
+
+        elif name == "shuffled":
+            io_spec = load_io_spec("data/io_spec.json")
+            all_in = np.concatenate(list(io_spec.input_groups.values()))
+            all_out = np.concatenate(list(io_spec.output_groups.values()))
+            sub_conn, sub_to_full = extract_subcircuit(self.conn, all_in, all_out, max_hops=3, max_neurons=1500)
+            full_to_sub = {int(full): sub for sub, full in enumerate(sub_to_full)}
+
+            io_sub = load_io_spec("data/io_spec.json")
+            for k in io_sub.input_groups:
+                io_sub.input_groups[k] = np.array([full_to_sub[i] for i in io_spec.input_groups[k] if i in full_to_sub], dtype=np.int32)
+            for k in io_sub.output_groups:
+                io_sub.output_groups[k] = np.array([full_to_sub[i] for i in io_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
+
+            shuffled_sub = shuffle_connectome(sub_conn, seed=42, n_swaps_factor=5)
+            shuffled_brain = Brian2Brain(shuffled_sub, LIFParams())
+            ctrl = BrainController(shuffled_brain, Encoder(io_sub, enc_cfg), Decoder(io_sub, dec_cfg), step_ms=step_ms)
+            io_spec = io_sub
+
+        elif name == "vnc":
+            vnc_spec = extract_fafb_vnc_spec(self.conn)
+            all_in_vnc = np.concatenate(list(vnc_spec.input_groups.values()))
+            all_out_vnc = np.concatenate(list(vnc_spec.output_groups.values()))
+            sub_vnc_conn, sub_to_full_vnc = extract_subcircuit(self.conn, all_in_vnc, all_out_vnc, max_hops=3, max_neurons=1500)
+            full_to_sub_vnc = {int(full): sub for sub, full in enumerate(sub_to_full_vnc)}
+
+            vnc_io_sub = extract_fafb_vnc_spec(self.conn)
+            for k in vnc_io_sub.input_groups:
+                vnc_io_sub.input_groups[k] = np.array([full_to_sub_vnc[i] for i in vnc_spec.input_groups[k] if i in full_to_sub_vnc], dtype=np.int32)
+            for k in vnc_io_sub.output_groups:
+                vnc_io_sub.output_groups[k] = np.array([full_to_sub_vnc[i] for i in vnc_spec.output_groups[k] if i in full_to_sub_vnc], dtype=np.int32)
+
+            vnc_brain = Brian2Brain(sub_vnc_conn, LIFParams())
+            pool = VNCMotorPool(vnc_io_sub, VNCConfig())
+            ctrl = VNCBrainController(vnc_brain, Encoder(vnc_io_sub, enc_cfg), pool, step_ms=step_ms)
+            io_spec = vnc_io_sub
+
+        elif name == "trained_brain":
+            vnc_spec = extract_fafb_vnc_spec(self.conn)
+            all_in_vnc = np.concatenate(list(vnc_spec.input_groups.values()))
+            all_out_vnc = np.concatenate(list(vnc_spec.output_groups.values()))
+            sub_vnc_conn, sub_to_full_vnc = extract_subcircuit(self.conn, all_in_vnc, all_out_vnc, max_hops=3, max_neurons=1500)
+            full_to_sub_vnc = {int(full): sub for sub, full in enumerate(sub_to_full_vnc)}
+
+            vnc_io_trained = extract_fafb_vnc_spec(self.conn)
+            for k in vnc_io_trained.input_groups:
+                vnc_io_trained.input_groups[k] = np.array([full_to_sub_vnc[i] for i in vnc_spec.input_groups[k] if i in full_to_sub_vnc], dtype=np.int32)
+            for k in vnc_io_trained.output_groups:
+                vnc_io_trained.output_groups[k] = np.array([full_to_sub_vnc[i] for i in vnc_spec.output_groups[k] if i in full_to_sub_vnc], dtype=np.int32)
+
+            trained_brain_core = Brian2Brain(sub_vnc_conn, LIFParams())
+            chk_path = Path("data/checkpoints/trained_brain.npz")
+            if chk_path.exists():
+                plast = RSTDPPlasticity(trained_brain_core)
+                plast.load_weights(chk_path)
+            else:
+                logger.warning("Checkpoint trained_brain.npz not found; running with baseline weights.")
+
+            pool = VNCMotorPool(vnc_io_trained, VNCConfig())
+            ctrl = VNCBrainController(trained_brain_core, Encoder(vnc_io_trained, enc_cfg), pool, step_ms=step_ms)
+            io_spec = vnc_io_trained
+
+        else:
+            raise ValueError(f"Unknown controller: {name}")
+
+        self.cache[name] = ctrl
+        self.io_cache[name] = io_spec
+        return ctrl, io_spec
 
 
 def run_interactive(
-    controller_name: str = "brain",
+    controller_name: str = "trained_brain",
     seed: int = 42,
     config_path: str = "configs/default.yaml",
     headless_check: bool = False,
     max_check_steps: int = 50,
 ) -> None:
+    # 1. Initialize viewer first so desktop window appears immediately
+    viewer = ArcadeViewer(headless=headless_check, fps=20)
+    viewer.show_loading("Starting Fly Brain Arcade...", "Loading Connectome & Configurations...")
+
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
@@ -139,17 +186,15 @@ def run_interactive(
     )
     env = SpaceInvadersEnv(env_cfg)
 
-    viewer = ArcadeViewer(headless=headless_check, fps=20)
-
-    # Load connectome and controllers
+    # 2. Load Connectome
     logger.info("Loading connectome...")
     conn = load_connectome(release="783", min_syn=int(cfg["data"]["min_syn"]))
-    io_spec = load_io_spec("data/io_spec.json")
 
-    controllers, io_sub = load_controllers_dict(conn, io_spec, cfg)
+    # 3. Initialize Controller Manager (on-demand loading)
+    manager = ControllerManager(conn, cfg, viewer=viewer)
 
-    current_ctrl_name = controller_name if controller_name in controllers else "brain"
-    current_ctrl = controllers[current_ctrl_name]
+    current_ctrl_name = controller_name
+    current_ctrl, io_sub = manager.get(current_ctrl_name)
 
     obs, _ = env.reset(seed=seed)
     current_ctrl.reset(seed=seed)
@@ -170,11 +215,13 @@ def run_interactive(
             if events["pause_toggle"]:
                 is_paused = not is_paused
 
-            if events["switch_ctrl"] and events["switch_ctrl"] in controllers:
-                current_ctrl_name = events["switch_ctrl"]
-                current_ctrl = controllers[current_ctrl_name]
-                current_ctrl.reset(seed=seed + step_num)
-                logger.info(f"Switched controller to: '{current_ctrl_name}'")
+            if events["switch_ctrl"]:
+                next_ctrl_name = events["switch_ctrl"]
+                if next_ctrl_name != current_ctrl_name:
+                    current_ctrl_name = next_ctrl_name
+                    current_ctrl, io_sub = manager.get(current_ctrl_name)
+                    current_ctrl.reset(seed=seed + step_num)
+                    logger.info(f"Switched controller to: '{current_ctrl_name}'")
 
             if events["reset"]:
                 seed += 1

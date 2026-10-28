@@ -28,6 +28,9 @@ class ArcadeViewer:
 
         if self.headless:
             os.environ["SDL_VIDEODRIVER"] = "dummy"
+        else:
+            if "SDL_VIDEODRIVER" in os.environ:
+                del os.environ["SDL_VIDEODRIVER"]
 
         pygame.init()
         pygame.font.init()
@@ -37,6 +40,7 @@ class ArcadeViewer:
         else:
             self.screen = pygame.display.set_mode((self.width, self.height))
             pygame.display.set_caption("Fly Brain Arcade 🪰🕹️ — Drosophila Connectome v783")
+            pygame.event.pump()
 
         self.clock = pygame.time.Clock()
         self.font_small = pygame.font.SysFont("consolas", 13)
@@ -58,6 +62,22 @@ class ArcadeViewer:
         self.spike_history: list[tuple[int, int, str]] = []
         self.max_history_steps = 30
         self.step_idx = 0
+
+    def show_loading(self, text: str = "Loading Fly Brain Connectome...", subtext: str = "Initializing Spiking Network...") -> None:
+        """Display an immediate responsive loading splash screen."""
+        if self.headless:
+            return
+        self.screen.fill((13, 17, 23))
+        title = self.font_large.render(text, True, (0, 255, 136))
+        trect = title.get_rect(center=(self.width // 2, self.height // 2 - 20))
+        self.screen.blit(title, trect)
+
+        sub = self.font_med.render(subtext, True, (139, 148, 158))
+        srect = sub.get_rect(center=(self.width // 2, self.height // 2 + 20))
+        self.screen.blit(sub, srect)
+
+        pygame.display.flip()
+        pygame.event.pump()
 
     def process_events(self) -> dict:
         """Process keyboard / window events.
