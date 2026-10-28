@@ -1,0 +1,36 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.so
+*.pyd
+
+# Brian2 generated code
+brian_obj/
+brian_objects/
+
+# Data (large files – gitignored; use MANIFEST.json + sha256 for reproducibility)
+data/raw/
+data/processed/
+
+# Reports (generated artefacts)
+reports/
+tmp/
+
+# IDE / OS
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Env files
+.env
+*.env
