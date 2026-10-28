@@ -1,0 +1,62 @@
+{
+  "git_commit": "b13ac1173daaf6e666cf2612f20c40cfe6fb56c6",
+  "config_hash": "5047a25018eacc08",
+  "io_spec_hash": "34c2bbf8b0b3b25f",
+  "data_manifest": {
+    "Connectivity_783.parquet": {
+      "sha256": "efeb23fb99098e9c390f6869969b2a121a2ee92c833cfc45ecb2c1d8e1af0347",
+      "bytes": 100804642,
+      "url": "https://raw.githubusercontent.com/philshiu/Drosophila_brain_model/main/Connectivity_783.parquet"
+    },
+    "Completeness_783.csv": {
+      "sha256": "bbb847a4cc2caaa7a16349722d220c087317b946d148d4d592d94d250617a311",
+      "bytes": 3327347,
+      "url": "https://raw.githubusercontent.com/philshiu/Drosophila_brain_model/main/Completeness_783.csv"
+    },
+    "Supplemental_file1_neuron_annotations.tsv": {
+      "sha256": "b214970b55d2fbe0853bba536fdcb9e28730f4eb7ab06f600491df795da683cd",
+      "bytes": 31720298,
+      "url": "https://raw.githubusercontent.com/flyconnectome/flywire_annotations/main/supplemental_files/Supplemental_file1_neuron_annotations.tsv"
+    }
+  },
+  "controllers": [
+    "random",
+    "heuristic",
+    "brain",
+    "shuffled",
+    "random_io"
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29
+  ],
+  "n_episodes": 150
+}

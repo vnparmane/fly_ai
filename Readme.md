@@ -40,23 +40,23 @@ Game Observation -> Encoder -> SpikingBrain.set_poisson_input (Poisson drive)
 
 ## 3. Results & Baseline Comparisons
 
-Evaluated across standardized seeds with 95% bootstrap confidence intervals ($n=10{,}000$ resamples) and two-sided Mann–Whitney U tests:
+Evaluated across 30 standardized seeds (seeds 0–29) with 95% bootstrap confidence intervals ($n=10{,}000$ resamples) and two-sided Mann–Whitney U tests:
 
 | Controller | Description | Mean Kills | 95% Bootstrap CI | Mean Steps | Accuracy |
 |---|---|---|---|---|---|
-| **Heuristic** | Upper-bound reference tracking & dodging | 9.67 | [5.00, 12.00] | 442.3 | 35.0% |
-| **Random** | Bernoulli action baseline ($p=0.1$) | 2.00 | [0.00, 4.00] | 89.0 | 46.7% |
-| **Random-I/O Brain** | Connectome with resampled I/O groups | 0.33 | [0.00, 1.00] | 80.7 | 33.3% |
-| **Shuffled Brain** | Degree-preserving edge swapped network | 0.00 | [0.00, 0.00] | 92.7 | 0.0% |
-| **Fly Brain (Real)** | Real connectome wiring + derived I/O | 0.00 | [0.00, 0.00] | 70.3 | 0.0% |
+| **Heuristic** | Upper-bound reference tracking & dodging | 12.47 | [11.57, 13.33] | 551.7 | 33.5% |
+| **Random** | Bernoulli action baseline ($p=0.1$) | 2.00 | [1.47, 2.57] | 123.4 | 36.1% |
+| **Random-I/O Brain** | Connectome with resampled I/O groups | 0.53 | [0.23, 0.87] | 134.2 | 27.3% |
+| **Shuffled Brain** | Degree-preserving edge swapped network | 0.00 | [0.00, 0.00] | 102.7 | 0.0% |
+| **Fly Brain (Real)** | Real connectome wiring + derived I/O | 0.00 | [0.00, 0.00] | 103.2 | 0.0% |
 
-### Statistical Comparison (Brain vs Controls)
-* **Brain vs Random:** $U = 1.0$, $p = 0.1797$, Cohen's $d = -1.41$
-* **Brain vs Heuristic:** $U = 0.0$, $p = 0.0463$, Cohen's $d = -2.71$
-* **Brain vs Shuffled-Wiring:** $U = 4.5$, $p = 1.0000$, Cohen's $d = 0.00$
-* **Brain vs Random-I/O:** $U = 3.0$, $p = 0.4237$, Cohen's $d = -0.71$
+### Statistical Comparison (Brain vs Controls, $N=30$)
+* **Brain vs Random:** $U = 60.0$, $p = 1.62 \times 10^{-10}$, Cohen's $d = -1.82$
+* **Brain vs Heuristic:** $U = 0.0$, $p = 7.58 \times 10^{-13}$, Cohen's $d = -7.05$
+* **Brain vs Shuffled-Wiring:** $U = 450.0$, $p = 1.0000$, Cohen's $d = 0.00$
+* **Brain vs Random-I/O:** $U = 300.0$, $p = 6.52 \times 10^{-4}$, Cohen's $d = -0.84$
 
-> **Scientific Interpretation:** Under the zero-plasticity baseline with 50 ms time steps, the unadapted fly connectome exhibits a null result against active baselines (Brain $\approx$ Shuffled-Wiring). As mandated by PRD § 2 and § 7, this null result is reported objectively. The structure of the connectome provides lateral steering selectivity (90%+ left/right selectivity under sensory illumination) without achieving autonomous gameplay parity against engineered heuristics.
+> **Scientific Interpretation:** Under the zero-plasticity baseline with 50 ms time steps, the unadapted fly connectome exhibits a null result against active baselines (Brain $\approx$ Shuffled-Wiring, 0 kills). As mandated by PRD § 2 and § 7, this null result is reported objectively. The structure of the connectome provides robust lateral steering selectivity (90%+ left/right selectivity under sensory illumination) without achieving autonomous gameplay parity against engineered heuristics or continuous-firing random agents.
 
 ---
 
