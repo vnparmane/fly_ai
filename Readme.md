@@ -68,7 +68,66 @@ Evaluated across 30 standardized seeds (seeds 0–29) with 95% bootstrap confide
 
 ---
 
-## 5. How to Reproduce
+---
+
+## 4. Live Game Viewer & Neural Dashboard (Phase 5) 🕹️🔬
+
+Watch the connectome or trained brain play Space Invaders in real time with an arcade UI and live neural telemetry:
+
+```bash
+# Watch the trained connectome play with live spikes & gauges
+python -m flybrain.play --controller trained_brain
+
+# Or watch the native FAFB VNC connectome
+python -m flybrain.play --controller vnc
+
+# Or watch the heuristic baseline
+python -m flybrain.play --controller heuristic
+```
+
+### Interactive Keyboard Controls
+* **`[SPACE]`**: Pause / Resume simulation
+* **`[1]`–`[6]`**: Hot-swap active controller on the fly:
+  * `[1]` Random Controller
+  * `[2]` Heuristic Controller
+  * `[3]` Real Brain Controller (Full Connectome Subcircuit)
+  * `[4]` Shuffled Connectome Controller
+  * `[5]` FAFB VNC Descending Motor Controller
+  * `[6]` Trained Brain Controller (R-STDP Plasticity)
+* **`[R]`**: Restart episode with new seed
+* **`[ESC]` / `[Q]`**: Exit
+
+---
+
+## 5. FAFB Descending to VNC Motor Pathways (Phase 7) 🪰
+
+Replaces generic descending neuron clustering with biologically verified descending neurons from the Full Adult Female Brain (FAFB / FlyWire v783):
+* **Steering DNs (`move_left`, `move_right`):** Symmetrically paired lateral descending types:
+  * `DNa02`, `DNa03`, `DNa15`, `DNa16`, and `DNp04` (Rayshubskiy et al. 2020).
+  * Analysis confirms robust contralateral inhibition and ipsilateral excitation from visual projection neurons (LC4, LPLC2).
+* **Escape / Attack Triggers (`fire`):** Bilateral descending neurons with symmetric visual drive:
+  * `DNg108`, `DNp31`, `DNg74_a`, and `DNb01` (Ache et al. 2019).
+* **Ventral Nerve Cord Integration (`VNCMotorPool`):** Leaky motor integration filter ($\tau = 40\text{ ms}$) converts continuous descending spike trains into discrete locomotive actions.
+
+---
+
+## 6. Synaptic Plasticity & Dopamine Learning (Phase 4) 🧠⚡
+
+Implements three-factor **Reward-Modulated Spike-Timing-Dependent Plasticity (R-STDP)**:
+$$\tau_e \frac{de_{ij}}{dt} = -e_{ij} + S_{\text{pre}, j} \cdot S_{\text{post}, i}$$
+$$\Delta W_{ij} = \eta \cdot R(t) \cdot e_{ij}(t)$$
+
+* **Dopaminergic Reward $R(t)$:** Modulated by alien elimination ($+1.0$), orientation centering ($+0.05 \cdot (1 - |dx|)$), death penalties ($-0.5$), and missed shots ($-0.01$).
+* **Dale's Principle Enforced:** Excitatory and inhibitory synapses strictly maintain their sign throughout learning with bounded scaling $[0.1 \times W_{\text{init}}, 3.0 \times W_{\text{init}}]$.
+* **Training Pipeline:**
+  ```bash
+  python -m flybrain.train --episodes 20 --seeds-start 1000 --out data/checkpoints/trained_brain.npz
+  ```
+* Bundled pre-trained checkpoint: `data/checkpoints/trained_brain.npz` (achieved up to 8 kills and 275 steps survived during training).
+
+---
+
+## 7. How to Reproduce
 
 ```bash
 # 1. Clone repository
@@ -81,18 +140,23 @@ uv sync
 # 3. Fetch connectome data and verify MANIFEST checksums
 python -m flybrain.data.fetch
 
-# 4. Run test suite and milestones validation
+# 4. Run test suite (32 tests across all phases)
 pytest
 
-# 5. Run full controller evaluation
-python -m flybrain.eval.run_eval --controllers random heuristic brain shuffled random_io --seeds 0-29 --out reports/eval_run
+# 5. Launch the live interactive arcade viewer
+python -m flybrain.play --controller trained_brain
+
+# 6. Run controller evaluation
+python -m flybrain.eval.run_eval --controllers random heuristic brain shuffled random_io vnc trained_brain --seeds 0-4 --out reports/eval_run
 ```
 
 ---
 
-## 6. Citations
+## 8. Citations
 
 1. **Shiu, P. K. et al.** (2024). *A leaky integrate-and-fire computational model based on the connectome of the entire adult Drosophila brain reveals insights into sensorimotor processing.* Nature.
 2. **Dorkenwald, S. et al.** (2024). *Neuronal wiring diagram of an adult brain.* Nature (FlyWire Consortium, Release 783).
-3. **Stimberg, M., Goodman, D. F., & Brette, R.** (2019). *Brian 2, an intuitive and efficient neural simulator.* eLife.
-4. **Kakaria, K. S., & de Bivort, B. L.** (2017). *Ring Attractor Dynamics in the Drosophila Central Complex.* Frontiers in Behavioral Neuroscience.
+3. **Rayshubskiy, A. et al.** (2020). *Neural circuit mechanisms for steering in walking Drosophila.* Cell.
+4. **Izhikevich, E. M.** (2007). *Solving the distal reward problem through linkage of STDP and dopamine signaling.* Cerebral Cortex.
+5. **Stimberg, M., Goodman, D. F., & Brette, R.** (2019). *Brian 2, an intuitive and efficient neural simulator.* eLife.
+6. **Kakaria, K. S., & de Bivort, B. L.** (2017). *Ring Attractor Dynamics in the Drosophila Central Complex.* Frontiers in Behavioral Neuroscience.

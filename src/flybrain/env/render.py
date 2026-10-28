@@ -89,6 +89,8 @@ class ArcadeViewer:
                     flags["switch_ctrl"] = "shuffled"
                 elif event.key == pygame.K_5:
                     flags["switch_ctrl"] = "vnc"
+                elif event.key == pygame.K_6:
+                    flags["switch_ctrl"] = "trained_brain"
 
         return flags
 
@@ -344,7 +346,7 @@ class ArcadeViewer:
         ry += 10
         keys_help = [
             "[SPACE] Pause/Play  |  [R] Reset Seed  |  [ESC] Quit",
-            "[1] Random  [2] Heuristic  [3] Brain  [4] Shuffled  [5] VNC",
+            "[1] Random [2] Heuristic [3] Brain [4] Shuffled [5] VNC [6] Trained",
         ]
         for line in keys_help:
             self.screen.blit(self.font_small.render(line, True, (139, 148, 158)), (rx, ry))

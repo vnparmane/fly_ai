@@ -13,7 +13,9 @@ import yaml
 
 from flybrain.brain.backend_brian2 import Brian2Brain
 from flybrain.brain.lif import LIFParams
+from flybrain.brain.plasticity import RSTDPPlasticity
 from flybrain.brain.subcircuit import extract_subcircuit
+from flybrain.brain.vnc import VNCBrainController, VNCConfig, VNCMotorPool, extract_fafb_vnc_spec
 from flybrain.control.brain_ctrl import BrainController
 from flybrain.control.heuristic import HeuristicController
 from flybrain.control.random_ctrl import RandomController
@@ -139,6 +141,49 @@ def run_evaluation(config_path: Path, controllers: list[str], seeds: list[int], 
             logger.info("Building random-I/O brain controller...")
             resampled_io = resample_io(io_spec, conn, seed=42)
             ctrl = build_brain_controller(conn, resampled_io, cfg)
+        elif ctrl_name == "vnc":
+            logger.info("Building FAFB VNC brain controller...")
+            vnc_spec = extract_fafb_vnc_spec(conn)
+            all_in = np.concatenate(list(vnc_spec.input_groups.values()))
+            all_out = np.concatenate(list(vnc_spec.output_groups.values()))
+            sub_conn, sub_to_full = extract_subcircuit(conn, all_in, all_out, max_hops=3, max_neurons=1500)
+            full_to_sub = {int(full): sub for sub, full in enumerate(sub_to_full)}
+
+            io_sub = extract_fafb_vnc_spec(conn)
+            for k in io_sub.input_groups:
+                io_sub.input_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.input_groups[k] if i in full_to_sub], dtype=np.int32)
+            for k in io_sub.output_groups:
+                io_sub.output_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
+
+            brain = Brian2Brain(sub_conn, LIFParams())
+            enc = Encoder(io_sub, EncoderConfig(max_rate_hz=float(cfg["encoder"]["max_rate_hz"])))
+            pool = VNCMotorPool(io_sub, VNCConfig())
+            ctrl = VNCBrainController(brain, enc, pool, step_ms=float(cfg["eval"]["step_ms"]))
+        elif ctrl_name == "trained_brain":
+            logger.info("Building trained brain controller (loading R-STDP weights)...")
+            vnc_spec = extract_fafb_vnc_spec(conn)
+            all_in = np.concatenate(list(vnc_spec.input_groups.values()))
+            all_out = np.concatenate(list(vnc_spec.output_groups.values()))
+            sub_conn, sub_to_full = extract_subcircuit(conn, all_in, all_out, max_hops=3, max_neurons=1500)
+            full_to_sub = {int(full): sub for sub, full in enumerate(sub_to_full)}
+
+            io_sub = extract_fafb_vnc_spec(conn)
+            for k in io_sub.input_groups:
+                io_sub.input_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.input_groups[k] if i in full_to_sub], dtype=np.int32)
+            for k in io_sub.output_groups:
+                io_sub.output_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
+
+            brain = Brian2Brain(sub_conn, LIFParams())
+            chk_path = Path("data/checkpoints/trained_brain.npz")
+            if chk_path.exists():
+                plast = RSTDPPlasticity(brain)
+                plast.load_weights(chk_path)
+            else:
+                logger.warning(f"Checkpoint {chk_path} not found, running untrained weights.")
+
+            enc = Encoder(io_sub, EncoderConfig(max_rate_hz=float(cfg["encoder"]["max_rate_hz"])))
+            pool = VNCMotorPool(io_sub, VNCConfig())
+            ctrl = VNCBrainController(brain, enc, pool, step_ms=float(cfg["eval"]["step_ms"]))
         else:
             raise ValueError(f"Unknown controller: {ctrl_name}")
 

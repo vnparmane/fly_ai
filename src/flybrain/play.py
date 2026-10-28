@@ -10,6 +10,7 @@ import yaml
 
 from flybrain.brain.backend_brian2 import Brian2Brain
 from flybrain.brain.lif import LIFParams
+from flybrain.brain.plasticity import RSTDPPlasticity
 from flybrain.brain.subcircuit import extract_subcircuit
 from flybrain.brain.vnc import VNCBrainController, VNCConfig, VNCMotorPool, extract_fafb_vnc_spec
 from flybrain.control.base import Controller
@@ -85,6 +86,30 @@ def load_controllers_dict(conn, io_spec, cfg) -> dict[str, Controller]:
 
     vnc_pool = VNCMotorPool(vnc_io_sub, VNCConfig())
     controllers["vnc"] = VNCBrainController(brain_core, enc, vnc_pool, step_ms=float(cfg["eval"]["step_ms"]))
+
+    # 4. Trained Brain Controller (with R-STDP weights)
+    chk_path = Path("data/checkpoints/trained_brain.npz")
+    if chk_path.exists():
+        logger.info("Loading trained brain checkpoint...")
+        all_in_vnc = np.concatenate(list(vnc_spec.input_groups.values()))
+        all_out_vnc = np.concatenate(list(vnc_spec.output_groups.values()))
+        sub_vnc_conn, sub_to_full_vnc = extract_subcircuit(conn, all_in_vnc, all_out_vnc, max_hops=3, max_neurons=1500)
+        full_to_sub_vnc = {int(full): sub for sub, full in enumerate(sub_to_full_vnc)}
+
+        vnc_io_trained = extract_fafb_vnc_spec(conn)
+        for k in vnc_io_trained.input_groups:
+            vnc_io_trained.input_groups[k] = np.array([full_to_sub_vnc[i] for i in vnc_spec.input_groups[k] if i in full_to_sub_vnc], dtype=np.int32)
+        for k in vnc_io_trained.output_groups:
+            vnc_io_trained.output_groups[k] = np.array([full_to_sub_vnc[i] for i in vnc_spec.output_groups[k] if i in full_to_sub_vnc], dtype=np.int32)
+
+        trained_brain_core = Brian2Brain(sub_vnc_conn, LIFParams())
+        plast = RSTDPPlasticity(trained_brain_core)
+        plast.load_weights(chk_path)
+        enc_trained = Encoder(vnc_io_trained, enc_cfg)
+        vnc_pool_trained = VNCMotorPool(vnc_io_trained, VNCConfig())
+        controllers["trained_brain"] = VNCBrainController(
+            trained_brain_core, enc_trained, vnc_pool_trained, step_ms=float(cfg["eval"]["step_ms"])
+        )
 
     return controllers, io_sub
 
@@ -203,7 +228,11 @@ def run_interactive(
 
 def main():
     parser = argparse.ArgumentParser(description="Fly Brain Arcade Live Player & Neural Monitor")
-    parser.add_argument("--controller", default="brain", choices=["brain", "vnc", "heuristic", "random", "shuffled"])
+    parser.add_argument(
+        "--controller",
+        default="trained_brain",
+        choices=["trained_brain", "brain", "vnc", "heuristic", "random", "shuffled"],
+    )
     parser.add_argument("--seed", type=int, default=42, help="Initial game seed")
     parser.add_argument("--config", default="configs/default.yaml", help="Path to config file")
     parser.add_argument("--headless-check", action="store_true", help="Run 50 steps headlessly for verification")
