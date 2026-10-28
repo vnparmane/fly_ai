@@ -11,6 +11,7 @@ import yaml
 from flybrain.brain.backend_brian2 import Brian2Brain
 from flybrain.brain.lif import LIFParams
 from flybrain.brain.subcircuit import extract_subcircuit
+from flybrain.brain.vnc import VNCBrainController, VNCConfig, VNCMotorPool, extract_fafb_vnc_spec
 from flybrain.control.base import Controller
 from flybrain.control.brain_ctrl import BrainController
 from flybrain.control.heuristic import HeuristicController
@@ -73,6 +74,17 @@ def load_controllers_dict(conn, io_spec, cfg) -> dict[str, Controller]:
         Decoder(io_sub, dec_cfg),
         step_ms=float(cfg["eval"]["step_ms"]),
     )
+
+    # 3. FAFB VNC Descending Motor Controller
+    vnc_spec = extract_fafb_vnc_spec(conn)
+    vnc_io_sub = extract_fafb_vnc_spec(conn)
+    for k in vnc_io_sub.input_groups:
+        vnc_io_sub.input_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.input_groups[k] if i in full_to_sub], dtype=np.int32)
+    for k in vnc_io_sub.output_groups:
+        vnc_io_sub.output_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
+
+    vnc_pool = VNCMotorPool(vnc_io_sub, VNCConfig())
+    controllers["vnc"] = VNCBrainController(brain_core, enc, vnc_pool, step_ms=float(cfg["eval"]["step_ms"]))
 
     return controllers, io_sub
 
@@ -191,7 +203,7 @@ def run_interactive(
 
 def main():
     parser = argparse.ArgumentParser(description="Fly Brain Arcade Live Player & Neural Monitor")
-    parser.add_argument("--controller", default="brain", choices=["brain", "heuristic", "random", "shuffled"])
+    parser.add_argument("--controller", default="brain", choices=["brain", "vnc", "heuristic", "random", "shuffled"])
     parser.add_argument("--seed", type=int, default=42, help="Initial game seed")
     parser.add_argument("--config", default="configs/default.yaml", help="Path to config file")
     parser.add_argument("--headless-check", action="store_true", help="Run 50 steps headlessly for verification")
