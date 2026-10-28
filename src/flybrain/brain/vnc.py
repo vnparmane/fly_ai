@@ -26,9 +26,9 @@ FAFB_FIRE_TYPES = ["DNg108", "DNp31", "DNg74_a", "DNb01"]
 @dataclass(frozen=True)
 class VNCConfig:
     tau_vnc_ms: float = 40.0
-    steering_margin_hz: float = 2.0
-    steering_thresh_hz: float = 4.0
-    fire_thresh_hz: float = 5.0
+    steering_margin_hz: float = 1.0
+    steering_thresh_hz: float = 2.0
+    fire_thresh_hz: float = 2.0
 
 
 def extract_fafb_vnc_spec(conn: Connectome) -> IOSpec:

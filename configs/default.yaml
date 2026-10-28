@@ -44,14 +44,15 @@ env:
   height: 210
   player_speed: 2.0
   bullet_speed: 4.0
-  fire_cooldown_steps: 12
+  fire_cooldown_steps: 5
   enemy_rows: 3
   enemy_cols: 6
-  enemy_speed: 0.5
+  enemy_speed: 0.4
   enemy_drop: 6.0
-  enemy_fire_prob: 0.01
+  enemy_fire_prob: 0.008
   max_steps: 600
   waves: 1
+  lives: 3
 eval:
   step_ms: 50.0
   controllers:

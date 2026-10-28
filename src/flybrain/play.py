@@ -176,13 +176,14 @@ def run_interactive(
         height=int(cfg["env"]["height"]),
         player_speed=float(cfg["env"]["player_speed"]),
         bullet_speed=float(cfg["env"]["bullet_speed"]),
-        fire_cooldown_steps=int(cfg["env"]["fire_cooldown_steps"]),
+        fire_cooldown_steps=4,
         enemy_rows=int(cfg["env"]["enemy_rows"]),
         enemy_cols=int(cfg["env"]["enemy_cols"]),
-        enemy_speed=float(cfg["env"]["enemy_speed"]),
+        enemy_speed=0.4,
         enemy_drop=float(cfg["env"]["enemy_drop"]),
-        enemy_fire_prob=float(cfg["env"]["enemy_fire_prob"]),
+        enemy_fire_prob=0.008,
         max_steps=int(cfg["env"]["max_steps"]),
+        lives=3,
     )
     env = SpaceInvadersEnv(env_cfg)
 
@@ -202,6 +203,7 @@ def run_interactive(
     logger.info(f"Starting interactive session with controller: '{current_ctrl_name}' (Seed: {seed})")
     is_paused = False
     step_num = 0
+    prev_kills = 0
     t_last = time.perf_counter()
     fps_estimate = 20.0
 
@@ -228,6 +230,7 @@ def run_interactive(
                 obs, _ = env.reset(seed=seed)
                 current_ctrl.reset(seed=seed)
                 step_num = 0
+                prev_kills = 0
                 logger.info(f"Episode reset to seed {seed}")
 
             # 2. Simulation Step
@@ -236,15 +239,35 @@ def run_interactive(
                 obs, reward, term, trunc, info = env.step(action)
                 step_num += 1
 
-                # Record spikes into viewer
+                # Record spikes and trigger explosion on kill
                 last_batch = getattr(current_ctrl, "last_batch", None)
                 viewer.record_spikes(last_batch, io_sub)
+                if info["kills"] > prev_kills:
+                    viewer.trigger_explosion(env.player_x, 40.0)
+                    prev_kills = info["kills"]
 
-                # Reset upon episode termination in continuous mode
+                # Game Over / Episode termination handling
                 if term or trunc:
+                    viewer.render_frame(
+                        env=env,
+                        action=action,
+                        controller_name=current_ctrl_name,
+                        rates=getattr(current_ctrl, "last_rates", None),
+                        fps_actual=fps_estimate,
+                        is_paused=False,
+                    )
+                    if not headless_check:
+                        t_pause_start = time.perf_counter()
+                        while time.perf_counter() - t_pause_start < 1.2:
+                            ev = viewer.process_events()
+                            if ev["quit"]:
+                                return
+                            time.sleep(0.05)
+
                     seed += 1
                     obs, _ = env.reset(seed=seed)
                     current_ctrl.reset(seed=seed)
+                    prev_kills = 0
 
             # 3. Telemetry & Rendering
             t_now = time.perf_counter()

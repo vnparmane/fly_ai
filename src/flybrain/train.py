@@ -85,6 +85,7 @@ def train_episodes(
         enemy_drop=float(cfg["env"]["enemy_drop"]),
         enemy_fire_prob=float(cfg["env"]["enemy_fire_prob"]),
         max_steps=int(cfg["env"]["max_steps"]),
+        lives=int(cfg["env"].get("lives", 3)),
     )
 
     logger.info("Loading connectome and preparing subcircuit...")
@@ -186,6 +187,8 @@ def train_episodes(
             f"Ep {ep+1:2d}/{n_episodes} | Kills: {info['kills']} | Steps: {info['steps']:3d} | "
             f"Reward: {ep_reward:6.2f} | ΔW_L1: {stats['total_weight_delta_l1']} | Time: {wall_s:4.1f}s"
         )
+        # Save checkpoint after each episode
+        plasticity.save_weights(out_path)
 
     # Save trained checkpoint
     plasticity.save_weights(out_path)

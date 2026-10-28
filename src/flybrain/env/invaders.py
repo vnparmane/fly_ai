@@ -12,7 +12,7 @@ class InvadersConfig:
     height: int = 210
     player_speed: float = 2.0
     bullet_speed: float = 4.0
-    fire_cooldown_steps: int = 12
+    fire_cooldown_steps: int = 5
     enemy_rows: int = 3
     enemy_cols: int = 6
     enemy_speed: float = 0.5
@@ -20,6 +20,7 @@ class InvadersConfig:
     enemy_fire_prob: float = 0.01
     max_steps: int = 600
     waves: int = 1
+    lives: int = 1
 
 
 class SpaceInvadersEnv(gym.Env):
@@ -76,6 +77,8 @@ class SpaceInvadersEnv(gym.Env):
         self.kills = 0
         self.shots_fired = 0
         self.cooldown = 0
+        self.lives = self.cfg.lives
+        self.invulnerable_steps = 0
 
         # Player at bottom center
         self.player_x = self.cfg.width / 2.0
@@ -83,6 +86,13 @@ class SpaceInvadersEnv(gym.Env):
         self.player_bullets = []
         self.enemy_bullets = []
         self.enemy_dir = 1.0
+
+        # Defensive Bunkers at y = height - 42: 3 bunkers, each [x, y, hp]
+        self.bunkers = []
+        by = self.cfg.height - 42.0
+        for bx in [36.0, 80.0, 124.0]:
+            self.bunkers.append([bx - 6.0, by, 3])
+            self.bunkers.append([bx + 6.0, by, 3])
 
         # Initialize enemies grid
         self.enemies = []
@@ -98,7 +108,7 @@ class SpaceInvadersEnv(gym.Env):
                 self.enemies.append([ex, ey, 1.0])
 
         obs = self._get_obs()
-        info = {"score": 0, "kills": 0, "shots_fired": 0, "steps": 0}
+        info = {"score": 0, "kills": 0, "shots_fired": 0, "steps": 0, "lives": self.lives}
         return obs, info
 
     def step(self, action: np.ndarray) -> tuple[dict, float, bool, bool, dict]:
@@ -165,6 +175,26 @@ class SpaceInvadersEnv(gym.Env):
                 new_ebullets.append([ebx, eby_new])
         self.enemy_bullets = new_ebullets
 
+        # Check bunker collisions with player bullets
+        for b in list(self.player_bullets):
+            bx, by = b
+            for blk in self.bunkers:
+                if blk[2] > 0 and abs(bx - blk[0]) <= 5.0 and abs(by - blk[1]) <= 4.0:
+                    blk[2] -= 1
+                    if b in self.player_bullets:
+                        self.player_bullets.remove(b)
+                    break
+
+        # Check bunker collisions with enemy bullets
+        for eb in list(self.enemy_bullets):
+            ebx, eby = eb
+            for blk in self.bunkers:
+                if blk[2] > 0 and abs(ebx - blk[0]) <= 5.0 and abs(eby - blk[1]) <= 4.0:
+                    blk[2] -= 1
+                    if eb in self.enemy_bullets:
+                        self.enemy_bullets.remove(eb)
+                    break
+
         # Check player bullets hitting enemies
         for b in list(self.player_bullets):
             bx, by = b
@@ -180,11 +210,26 @@ class SpaceInvadersEnv(gym.Env):
                         self.score += 100
                         break
 
-        # Check termination: player hit by enemy bullet
-        for ebx, eby in self.enemy_bullets:
-            if abs(ebx - self.player_x) <= 6.0 and abs(eby - self.player_y) <= 6.0:
-                terminated = True
-                break
+        # Invulnerability countdown
+        if self.invulnerable_steps > 0:
+            self.invulnerable_steps -= 1
+
+        # Check player hit by enemy bullet (respecting invulnerability and lives)
+        if self.invulnerable_steps == 0:
+            for eb in list(self.enemy_bullets):
+                ebx, eby = eb
+                if abs(ebx - self.player_x) <= 6.0 and abs(eby - self.player_y) <= 6.0:
+                    if eb in self.enemy_bullets:
+                        self.enemy_bullets.remove(eb)
+                    self.lives -= 1
+                    if self.lives > 0:
+                        self.player_x = self.cfg.width / 2.0
+                        self.invulnerable_steps = 25  # ~1.25s invulnerable blink
+                        # Clear immediate danger zone
+                        self.enemy_bullets = [b for b in self.enemy_bullets if abs(b[1] - self.player_y) > 20.0]
+                    else:
+                        terminated = True
+                    break
 
         # Check termination: enemies reach player row
         for e in self.enemies:
@@ -207,6 +252,7 @@ class SpaceInvadersEnv(gym.Env):
             "kills": self.kills,
             "shots_fired": self.shots_fired,
             "steps": self.step_count,
+            "lives": self.lives,
         }
 
         return obs, reward, terminated, truncated, info
