@@ -8,7 +8,7 @@ import numpy as np
 class Controller(Protocol):
     """Protocol for all game controllers."""
 
-    def reset(self, seed: int) -> None:
+    def reset(self, seed: int, reset_weights: bool = False) -> None:
         """Reset internal controller state with seed."""
         ...
 

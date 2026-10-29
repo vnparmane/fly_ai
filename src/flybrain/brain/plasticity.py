@@ -111,21 +111,23 @@ class RSTDPPlasticity:
         }
         return stats
 
-    def save_weights(self, path: Path | str) -> None:
-        """Save trained synaptic weights and signs to an NPZ file."""
+    def save_weights(self, path: Path | str, **metadata) -> None:
+        """Save trained synaptic weights, topology, and experiment metadata to an NPZ file."""
         from brian2 import volt
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         current_w = np.array(self.brain.syn.w[:] / volt, dtype=np.float32)
-        np.savez_compressed(
-            path,
-            w=current_w,
-            w_init=self.w_init,
-            signs=self.signs,
-            cumulative_delta=self.cumulative_delta,
-            pre_idx=self.pre_idx,
-            post_idx=self.post_idx,
-        )
+        save_dict = {
+            "w": current_w,
+            "w_init": self.w_init,
+            "signs": self.signs,
+            "cumulative_delta": self.cumulative_delta,
+            "pre_idx": self.pre_idx,
+            "post_idx": self.post_idx,
+        }
+        for k, v in metadata.items():
+            save_dict[k] = v
+        np.savez_compressed(path, **save_dict)
         logger.info(f"Saved trained weights ({len(current_w)} synapses) to {path}")
 
     def load_weights(self, path: Path | str) -> None:

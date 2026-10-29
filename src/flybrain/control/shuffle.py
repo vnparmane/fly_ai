@@ -133,8 +133,10 @@ def resample_io(io_spec: IOSpec, conn: Connectome, seed: int) -> IOSpec:
     perm_dn = rng.permutation(cand_dn)
 
     new_in_left = perm_left[:size_in_l]
+    new_in_aligned_l = perm_left[size_in_l : size_in_l + size_in_a // 2]
     new_in_right = perm_right[:size_in_r]
-    new_in_aligned = np.concatenate([new_in_left[: size_in_a // 2], new_in_right[: size_in_a // 2]])
+    new_in_aligned_r = perm_right[size_in_r : size_in_r + size_in_a // 2]
+    new_in_aligned = np.concatenate([new_in_aligned_l, new_in_aligned_r])
 
     total_dn = size_out_l + size_out_r + size_out_f
     if len(perm_dn) < total_dn:

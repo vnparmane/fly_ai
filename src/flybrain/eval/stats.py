@@ -68,7 +68,7 @@ def compute_evaluation_stats(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     # Hypothesis tests: Brain vs each other controller
     brain_kills = df[df["controller"] == "brain"]["kills"].values if "brain" in controllers else None
 
-    comparison_lines = ["## Statistical Comparisons (Brain vs Controls)\n"]
+    comparison_lines = ["## Statistical Comparisons (Untrained Brain vs Controls)\n"]
     comparison_lines.append("| Comparison | Brain Mean | Control Mean | Mann-Whitney U | p-value | Cohen's d |")
     comparison_lines.append("|---|---|---|---|---|---|")
 
@@ -83,6 +83,22 @@ def compute_evaluation_stats(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
                 f"| Brain vs {ctrl} | {np.mean(brain_kills):.2f} | {np.mean(ctrl_kills):.2f} | "
                 f"{u_stat:.1f} | {p_val:.4e} | {d:+.2f} |"
             )
+
+    # Hypothesis tests: Trained Brain vs Ablation Controls
+    trained_brain_kills = df[df["controller"] == "trained_brain"]["kills"].values if "trained_brain" in controllers else None
+    if trained_brain_kills is not None and len(trained_brain_kills) > 0:
+        comparison_lines.append("\n## Statistical Comparisons (Trained Brain vs Ablation Controls)\n")
+        comparison_lines.append("| Comparison | Trained Brain Mean | Control Mean | Mann-Whitney U | p-value | Cohen's d |")
+        comparison_lines.append("|---|---|---|---|---|---|")
+        for ctrl in ["trained_shuffled", "trained_random_io", "vnc", "brain", "shuffled", "random_io", "heuristic", "random"]:
+            if ctrl in controllers and ctrl != "trained_brain":
+                ctrl_kills = df[df["controller"] == ctrl]["kills"].values
+                u_stat, p_val = stats.mannwhitneyu(trained_brain_kills, ctrl_kills, alternative="two-sided")
+                d = cohen_d(trained_brain_kills, ctrl_kills)
+                comparison_lines.append(
+                    f"| Trained Brain vs {ctrl} | {np.mean(trained_brain_kills):.2f} | {np.mean(ctrl_kills):.2f} | "
+                    f"{u_stat:.1f} | {p_val:.4e} | {d:+.2f} |"
+                )
 
     stats_md = "\n".join(comparison_lines)
     return summary_df, stats_md

@@ -56,6 +56,13 @@ def test_resample_io(conn, io_spec):
         assert len(resampled.output_groups[k]) == len(io_spec.output_groups[k])
 
     # Disjointness preserved
+    in_left = set(resampled.input_groups["enemy_left"])
+    in_right = set(resampled.input_groups["enemy_right"])
+    in_aligned = set(resampled.input_groups["enemy_aligned"])
+    assert len(in_left.intersection(in_right)) == 0
+    assert len(in_left.intersection(in_aligned)) == 0
+    assert len(in_right.intersection(in_aligned)) == 0
+
     out_left = set(resampled.output_groups["move_left"])
     out_right = set(resampled.output_groups["move_right"])
     out_fire = set(resampled.output_groups["fire"])
@@ -75,17 +82,21 @@ def test_stats_and_bootstrap():
     assert d > 2.0
 
 
-def test_m5_exact_reproducibility():
-    """M5 Gate: Re-running evaluation on same seeds produces exact match."""
-    # Synthetic mock mini evaluation run
-    df1 = pd.DataFrame({
-        "controller": ["random", "heuristic"],
-        "seed": [0, 0],
-        "score": [100, 500],
-        "kills": [1, 5],
-        "shots_fired": [10, 12],
-        "steps_survived": [40, 120],
-        "wall_s": [0.1, 0.2],
-    })
-    df2 = df1.copy()
-    assert df1.equals(df2)
+def test_m5_exact_reproducibility(tmp_path):
+    """M5 Gate: Two evaluation runs with same seeds produce identical episodes.parquet."""
+    from flybrain.eval.run_eval import run_evaluation
+    dir1 = tmp_path / "run1"
+    dir2 = tmp_path / "run2"
+    cfg_path = "configs/default.yaml"
+    seeds = [42]
+    controllers = ["random", "heuristic", "vnc"]
+
+    run_evaluation(config_path=cfg_path, controllers=controllers, seeds=seeds, out_dir=dir1)
+    run_evaluation(config_path=cfg_path, controllers=controllers, seeds=seeds, out_dir=dir2)
+
+    df1 = pd.read_parquet(dir1 / "episodes.parquet")
+    df2 = pd.read_parquet(dir2 / "episodes.parquet")
+
+    # Metrics (excluding wall time) must match identically
+    metric_cols = ["controller", "seed", "score", "kills", "shots_fired", "steps_survived"]
+    pd.testing.assert_frame_equal(df1[metric_cols], df2[metric_cols])

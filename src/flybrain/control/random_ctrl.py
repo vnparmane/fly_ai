@@ -10,7 +10,7 @@ class RandomController:
         self.p = p
         self._rng = np.random.default_rng()
 
-    def reset(self, seed: int) -> None:
+    def reset(self, seed: int, reset_weights: bool = False) -> None:
         self._rng = np.random.default_rng(seed)
 
     def act(self, obs: dict) -> np.ndarray:

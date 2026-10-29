@@ -104,6 +104,7 @@ def run_evaluation(config_path: Path, controllers: list[str], seeds: list[int], 
     )
 
     conn = load_connectome(release="783", min_syn=int(cfg["data"]["min_syn"]))
+    lif_params = LIFParams.from_dict(cfg.get("lif", {}))
 
     episode_rows = []
 
@@ -178,8 +179,72 @@ def run_evaluation(config_path: Path, controllers: list[str], seeds: list[int], 
             if chk_path.exists():
                 plast = RSTDPPlasticity(brain)
                 plast.load_weights(chk_path)
+                import brian2 as b2
+                brain.initial_w = np.array(brain.syn.w[:] / b2.volt, dtype=np.float32)
+                brain.net.store("initial")
+                logger.info("Frozen trained checkpoint weights stored into baseline state.")
             else:
                 logger.warning(f"Checkpoint {chk_path} not found, running untrained weights.")
+
+            enc = Encoder(io_sub, EncoderConfig(max_rate_hz=float(cfg["encoder"]["max_rate_hz"])))
+            pool = VNCMotorPool(io_sub, VNCConfig())
+            ctrl = VNCBrainController(brain, enc, pool, step_ms=float(cfg["eval"]["step_ms"]))
+        elif ctrl_name == "trained_shuffled":
+            logger.info("Building trained shuffled-wiring brain controller (loading R-STDP weights)...")
+            vnc_spec = extract_fafb_vnc_spec(conn)
+            all_in = np.concatenate(list(vnc_spec.input_groups.values()))
+            all_out = np.concatenate(list(vnc_spec.output_groups.values()))
+            sub_conn, sub_to_full = extract_subcircuit(conn, all_in, all_out, max_hops=3, max_neurons=1500)
+            shuffled_sub = shuffle_connectome(sub_conn, seed=42, n_swaps_factor=5)
+            full_to_sub = {int(full): sub for sub, full in enumerate(sub_to_full)}
+
+            io_sub = extract_fafb_vnc_spec(conn)
+            for k in io_sub.input_groups:
+                io_sub.input_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.input_groups[k] if i in full_to_sub], dtype=np.int32)
+            for k in io_sub.output_groups:
+                io_sub.output_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
+
+            brain = Brian2Brain(shuffled_sub, lif_params)
+            chk_path = Path("data/checkpoints/trained_shuffled.npz")
+            if chk_path.exists():
+                plast = RSTDPPlasticity(brain)
+                plast.load_weights(chk_path)
+                import brian2 as b2
+                brain.initial_w = np.array(brain.syn.w[:] / b2.volt, dtype=np.float32)
+                brain.net.store("initial")
+                logger.info("Frozen trained shuffled checkpoint weights stored into baseline state.")
+            else:
+                logger.warning(f"Checkpoint {chk_path} not found, running baseline shuffled weights.")
+
+            enc = Encoder(io_sub, EncoderConfig(max_rate_hz=float(cfg["encoder"]["max_rate_hz"])))
+            pool = VNCMotorPool(io_sub, VNCConfig())
+            ctrl = VNCBrainController(brain, enc, pool, step_ms=float(cfg["eval"]["step_ms"]))
+        elif ctrl_name == "trained_random_io":
+            logger.info("Building trained random-I/O brain controller (loading R-STDP weights)...")
+            vnc_spec = extract_fafb_vnc_spec(conn)
+            resampled_vnc = resample_io(vnc_spec, conn, seed=42)
+            all_in = np.concatenate(list(resampled_vnc.input_groups.values()))
+            all_out = np.concatenate(list(resampled_vnc.output_groups.values()))
+            sub_conn, sub_to_full = extract_subcircuit(conn, all_in, all_out, max_hops=3, max_neurons=1500)
+            full_to_sub = {int(full): sub for sub, full in enumerate(sub_to_full)}
+
+            io_sub = resampled_vnc
+            for k in io_sub.input_groups:
+                io_sub.input_groups[k] = np.array([full_to_sub[i] for i in resampled_vnc.input_groups[k] if i in full_to_sub], dtype=np.int32)
+            for k in io_sub.output_groups:
+                io_sub.output_groups[k] = np.array([full_to_sub[i] for i in resampled_vnc.output_groups[k] if i in full_to_sub], dtype=np.int32)
+
+            brain = Brian2Brain(sub_conn, lif_params)
+            chk_path = Path("data/checkpoints/trained_random_io.npz")
+            if chk_path.exists():
+                plast = RSTDPPlasticity(brain)
+                plast.load_weights(chk_path)
+                import brian2 as b2
+                brain.initial_w = np.array(brain.syn.w[:] / b2.volt, dtype=np.float32)
+                brain.net.store("initial")
+                logger.info("Frozen trained random-I/O checkpoint weights stored into baseline state.")
+            else:
+                logger.warning(f"Checkpoint {chk_path} not found, running baseline random-I/O weights.")
 
             enc = Encoder(io_sub, EncoderConfig(max_rate_hz=float(cfg["encoder"]["max_rate_hz"])))
             pool = VNCMotorPool(io_sub, VNCConfig())
@@ -191,7 +256,7 @@ def run_evaluation(config_path: Path, controllers: list[str], seeds: list[int], 
             t0 = time.perf_counter()
             env = SpaceInvadersEnv(env_cfg)
             obs, _ = env.reset(seed=seed)
-            ctrl.reset(seed=seed)
+            ctrl.reset(seed=seed, reset_weights=True)
 
             done = False
             while not done:

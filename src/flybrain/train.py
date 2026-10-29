@@ -1,6 +1,7 @@
 """Training harness for Dopamine-Modulated Synaptic Plasticity (R-STDP) in Space Invaders."""
 
 import argparse
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -14,6 +15,7 @@ from flybrain.brain.plasticity import PlasticityConfig, RSTDPPlasticity
 from flybrain.brain.subcircuit import extract_subcircuit
 from flybrain.brain.vnc import VNCBrainController, VNCConfig, VNCMotorPool, extract_fafb_vnc_spec
 from flybrain.control.brain_ctrl import BrainController
+from flybrain.control.shuffle import resample_io, shuffle_connectome
 from flybrain.data.connectome import load_connectome
 from flybrain.env.invaders import InvadersConfig, SpaceInvadersEnv
 from flybrain.io.decoder import Decoder, DecoderConfig
@@ -61,17 +63,21 @@ def compute_dopamine_reward(
 
 
 def train_episodes(
-    n_episodes: int = 20,
-    seeds_start: int = 1000,
+    n_episodes: int = 10,
+    seeds_start: int = 2000,
     config_path: str = "configs/default.yaml",
     checkpoint_out: str = "data/checkpoints/trained_brain.npz",
     use_vnc: bool = True,
+    control: str = "none",
 ) -> Path:
     out_path = Path(checkpoint_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
+
+    cfg_str = json.dumps(cfg, sort_keys=True)
+    config_hash = hashlib.sha256(cfg_str.encode("utf-8")).hexdigest()[:16]
 
     env_cfg = InvadersConfig(
         width=int(cfg["env"]["width"]),
@@ -96,12 +102,23 @@ def train_episodes(
     else:
         io_spec = load_io_spec("data/io_spec.json")
 
+    if control == "random_io":
+        logger.info("Applying random-I/O resampling control for training...")
+        io_spec = resample_io(io_spec, conn, seed=42)
+
     all_in = np.concatenate(list(io_spec.input_groups.values()))
     all_out = np.concatenate(list(io_spec.output_groups.values()))
     sub_conn, sub_to_full = extract_subcircuit(conn, all_in, all_out, max_hops=3, max_neurons=1500)
+
+    if control == "shuffled":
+        logger.info("Applying degree-preserving wiring shuffle control for training...")
+        sub_conn = shuffle_connectome(sub_conn, seed=42, n_swaps_factor=5)
+
     full_to_sub = {int(full): sub for sub, full in enumerate(sub_to_full)}
 
     io_sub = load_io_spec("data/io_spec.json") if not use_vnc else extract_fafb_vnc_spec(conn)
+    if control == "random_io":
+        io_sub = io_spec
     for k in io_sub.input_groups:
         io_sub.input_groups[k] = np.array([full_to_sub[i] for i in io_spec.input_groups[k] if i in full_to_sub], dtype=np.int32)
     for k in io_sub.output_groups:
@@ -188,16 +205,40 @@ def train_episodes(
             f"Ep {ep+1:2d}/{n_episodes} | Kills: {info['kills']} | Steps: {info['steps']:3d} | "
             f"Reward: {ep_reward:6.2f} | ΔW_L1: {stats['total_weight_delta_l1']} | Time: {wall_s:4.1f}s"
         )
-        # Save checkpoint after each episode
-        plasticity.save_weights(out_path)
+        # Save checkpoint after each episode with metadata
+        training_seeds = [seeds_start + i for i in range(ep + 1)]
+        plasticity.save_weights(
+            out_path,
+            training_seeds=np.array(training_seeds, dtype=np.int32),
+            config_hash=config_hash,
+            io_spec_hash=io_spec.config_hash,
+            control_mode=control,
+        )
 
-    # Save trained checkpoint
-    plasticity.save_weights(out_path)
+    # Save final trained checkpoint
+    all_training_seeds = [seeds_start + i for i in range(n_episodes)]
+    plasticity.save_weights(
+        out_path,
+        training_seeds=np.array(all_training_seeds, dtype=np.int32),
+        config_hash=config_hash,
+        io_spec_hash=io_spec.config_hash,
+        control_mode=control,
+    )
 
-    # Save training log JSON
+    # Save training log JSON with metadata
     log_path = out_path.with_suffix(".json")
+    log_payload = {
+        "metadata": {
+            "control_mode": control,
+            "n_episodes": n_episodes,
+            "training_seeds": all_training_seeds,
+            "config_hash": config_hash,
+            "io_spec_hash": io_spec.config_hash,
+        },
+        "episodes": history,
+    }
     with open(log_path, "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2)
+        json.dump(log_payload, f, indent=2)
 
     logger.info(f"Training completed successfully! Saved to {out_path} and {log_path}")
     return out_path
@@ -206,7 +247,8 @@ def train_episodes(
 def main():
     parser = argparse.ArgumentParser(description="Train Fly Brain Connectome with R-STDP")
     parser.add_argument("--episodes", type=int, default=10, help="Number of training episodes")
-    parser.add_argument("--seeds-start", type=int, default=1000, help="Starting seed for training")
+    parser.add_argument("--seeds-start", type=int, default=2000, help="Starting seed for training")
+    parser.add_argument("--control", default="none", choices=["none", "shuffled", "random_io"], help="Control mode")
     parser.add_argument("--config", default="configs/default.yaml", help="Path to config file")
     parser.add_argument("--out", default="data/checkpoints/trained_brain.npz", help="Checkpoint output path")
     parser.add_argument("--use-vnc", action="store_true", default=True, help="Use FAFB VNC motor circuits")
@@ -218,6 +260,7 @@ def main():
         config_path=args.config,
         checkpoint_out=args.out,
         use_vnc=args.use_vnc,
+        control=args.control,
     )
 
 

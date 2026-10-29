@@ -9,7 +9,7 @@ class HeuristicController:
     def __init__(self, fire_thresh: float = 0.20) -> None:
         self.fire_thresh = fire_thresh
 
-    def reset(self, seed: int) -> None:
+    def reset(self, seed: int, reset_weights: bool = False) -> None:
         pass
 
     def act(self, obs: dict) -> np.ndarray:
