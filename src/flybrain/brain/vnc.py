@@ -41,11 +41,18 @@ def extract_fafb_vnc_spec(conn: Connectome) -> IOSpec:
     vpn_l = candidate_inputs(conn, "left")
     vpn_r = candidate_inputs(conn, "right")
 
-    # Sensory input groups
+    # Disjoint sensory input groups:
+    # enemy_aligned: bilateral receptive neurons allocated from both hemispheres
+    # enemy_left / enemy_right: exclusive monocular lateral pools
+    n_aligned = min(25, len(vpn_l) // 4, len(vpn_r) // 4)
+    aligned_dns = np.concatenate([vpn_l[:n_aligned], vpn_r[:n_aligned]])
+    left_dns_input = vpn_l[n_aligned:]
+    right_dns_input = vpn_r[n_aligned:]
+
     input_groups = {
-        "enemy_left": vpn_l.astype(np.int32),
-        "enemy_right": vpn_r.astype(np.int32),
-        "enemy_aligned": np.union1d(vpn_l[:20], vpn_r[:20]).astype(np.int32),
+        "enemy_left": left_dns_input.astype(np.int32),
+        "enemy_right": right_dns_input.astype(np.int32),
+        "enemy_aligned": aligned_dns.astype(np.int32),
     }
 
     # Left steering DNs
@@ -192,8 +199,8 @@ class VNCBrainController:
         self.last_rates = {"move_left": 0.0, "move_right": 0.0, "fire": 0.0}
         self.last_action = np.zeros(3, dtype=np.int8)
 
-    def reset(self, seed: int) -> None:
-        self.brain.reset(seed)
+    def reset(self, seed: int, reset_weights: bool = False) -> None:
+        self.brain.reset(seed, reset_weights=reset_weights)
         self.vnc.reset()
         self.last_batch = None
         self.last_rates = {"move_left": 0.0, "move_right": 0.0, "fire": 0.0}

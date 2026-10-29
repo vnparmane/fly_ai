@@ -107,15 +107,32 @@ class Brian2Brain:
         self.net = b2.Network(self.neu, self.syn, self.poi_group, self.poi_syn, self.spk_mon)
         self.current_time_ms = 0.0
 
-        # Store initial pristine state snapshot
+        # Store pristine baseline weights and initial state snapshot
+        if len(self.syn) > 0:
+            self.initial_w = np.array(self.syn.w[:] / b2.volt, dtype=np.float32)
+        else:
+            self.initial_w = np.array([], dtype=np.float32)
         self.net.store("initial")
         logger.info("Brian2Brain network initialized successfully.")
 
-    def reset(self, seed: int) -> None:
-        """Reset network state variables back to resting potential."""
+    def reset(self, seed: int, reset_weights: bool = False) -> None:
+        """Reset network dynamic state variables back to resting potential.
+        
+        Preserves trained/loaded synaptic weights across resets unless reset_weights=True.
+        """
         b2.seed(seed)
         np.random.seed(seed)
+
+        # Preserve weights across the snapshot restore unless explicitly resetting parameters
+        current_w = None
+        if not reset_weights and hasattr(self, "syn") and len(self.syn) > 0:
+            current_w = np.array(self.syn.w[:] / b2.volt, dtype=np.float32)
+
         self.net.restore("initial")
+
+        if current_w is not None:
+            self.syn.w = current_w * b2.volt
+
         self._poisson_rates[:] = 0.0 * Hz
         self.poi_group.rates = self._poisson_rates
         self.neu.v = self.ns["v_0"]
@@ -123,12 +140,25 @@ class Brian2Brain:
         self.neu.rfc = self.ns["t_rfc"]
         self.current_time_ms = 0.0
 
+    def reset_weights_to_initial(self) -> None:
+        """Explicitly reset synaptic weights to the original connectome baseline."""
+        if hasattr(self, "syn") and len(self.syn) > 0 and len(self.initial_w) > 0:
+            self.syn.w = self.initial_w * b2.volt
+
     def set_poisson_input(self, neuron_idx: np.ndarray, rate_hz: np.ndarray) -> None:
         """Set continuous Poisson firing rates on designated neurons."""
         if len(neuron_idx) == 0:
             return
         neuron_idx = np.asarray(neuron_idx, dtype=np.int32)
         rate_hz = np.asarray(rate_hz, dtype=np.float32)
+
+        # Handle duplicate indices deterministically via maximum aggregation across sensory channels
+        if len(neuron_idx) != len(np.unique(neuron_idx)):
+            unique_idx, inv = np.unique(neuron_idx, return_inverse=True)
+            agg_rates = np.zeros(len(unique_idx), dtype=np.float32)
+            np.maximum.at(agg_rates, inv, rate_hz)
+            neuron_idx = unique_idx
+            rate_hz = agg_rates
 
         # Update rates in PoissonGroup
         rates_copy = np.array(self.poi_group.rates / Hz)

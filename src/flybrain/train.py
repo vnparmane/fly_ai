@@ -115,7 +115,8 @@ def train_episodes(
     enc = Encoder(io_sub, enc_cfg)
 
     # Initialize Brain & Plasticity
-    brain = Brian2Brain(sub_conn, LIFParams())
+    lif_params = LIFParams.from_dict(cfg.get("lif", {}))
+    brain = Brian2Brain(sub_conn, lif_params)
     plasticity = RSTDPPlasticity(brain, PlasticityConfig(lr=0.005, decay=0.85))
 
     if use_vnc:

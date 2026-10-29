@@ -58,8 +58,8 @@ def build_brain_controller(conn, io_spec, cfg, max_sub_neurons=1500):
     for k in io_sub.output_groups:
         io_sub.output_groups[k] = np.array([full_to_sub[i] for i in io_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
 
-    params = LIFParams()
-    brain = Brian2Brain(sub_conn, params)
+    lif_params = LIFParams.from_dict(cfg.get("lif", {}))
+    brain = Brian2Brain(sub_conn, lif_params)
     enc_cfg = EncoderConfig(
         max_rate_hz=float(cfg["encoder"]["max_rate_hz"]),
         dx_range=float(cfg["encoder"]["dx_range"]),
@@ -132,7 +132,7 @@ def run_evaluation(config_path: Path, controllers: list[str], seeds: list[int], 
             for k in io_sub.output_groups:
                 io_sub.output_groups[k] = np.array([full_to_sub[i] for i in io_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
 
-            brain = Brian2Brain(shuffled_sub, LIFParams())
+            brain = Brian2Brain(shuffled_sub, lif_params)
             enc = Encoder(io_sub, EncoderConfig(max_rate_hz=float(cfg["encoder"]["max_rate_hz"])))
             dec = Decoder(io_sub, DecoderConfig(margin_hz=float(cfg["decoder"]["margin_hz"])))
             ctrl = BrainController(brain, enc, dec, step_ms=float(cfg["eval"]["step_ms"]))
@@ -155,7 +155,7 @@ def run_evaluation(config_path: Path, controllers: list[str], seeds: list[int], 
             for k in io_sub.output_groups:
                 io_sub.output_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
 
-            brain = Brian2Brain(sub_conn, LIFParams())
+            brain = Brian2Brain(sub_conn, lif_params)
             enc = Encoder(io_sub, EncoderConfig(max_rate_hz=float(cfg["encoder"]["max_rate_hz"])))
             pool = VNCMotorPool(io_sub, VNCConfig())
             ctrl = VNCBrainController(brain, enc, pool, step_ms=float(cfg["eval"]["step_ms"]))
@@ -173,7 +173,7 @@ def run_evaluation(config_path: Path, controllers: list[str], seeds: list[int], 
             for k in io_sub.output_groups:
                 io_sub.output_groups[k] = np.array([full_to_sub[i] for i in vnc_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
 
-            brain = Brian2Brain(sub_conn, LIFParams())
+            brain = Brian2Brain(sub_conn, lif_params)
             chk_path = Path("data/checkpoints/trained_brain.npz")
             if chk_path.exists():
                 plast = RSTDPPlasticity(brain)

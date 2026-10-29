@@ -12,7 +12,7 @@ lif:
   refractory_ms: 2.2
   delay_ms: 1.8
   w_syn_mv: 0.275
-  poisson_weight_scale: 0.275
+  poisson_weight_scale: 250.0
 nt_sign:
   acetylcholine: 1
   gaba: -1

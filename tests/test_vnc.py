@@ -28,8 +28,18 @@ def test_extract_fafb_vnc_spec(conn):
     # Check input groups
     assert "enemy_left" in spec.input_groups
     assert "enemy_right" in spec.input_groups
+    assert "enemy_aligned" in spec.input_groups
     assert len(spec.input_groups["enemy_left"]) > 0
     assert len(spec.input_groups["enemy_right"]) > 0
+    assert len(spec.input_groups["enemy_aligned"]) > 0
+
+    # Ensure sensory input groups are pairwise disjoint
+    in_l = set(spec.input_groups["enemy_left"])
+    in_r = set(spec.input_groups["enemy_right"])
+    in_a = set(spec.input_groups["enemy_aligned"])
+    assert len(in_l & in_r) == 0, "FAFB VNC left and right inputs overlap"
+    assert len(in_l & in_a) == 0, "FAFB VNC left and aligned inputs overlap"
+    assert len(in_r & in_a) == 0, "FAFB VNC right and aligned inputs overlap"
 
     # Check output groups
     assert "move_left" in spec.output_groups

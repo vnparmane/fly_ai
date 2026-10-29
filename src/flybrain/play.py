@@ -62,6 +62,7 @@ class ControllerManager:
             thresh_hz={k: float(v) for k, v in self.cfg["decoder"]["thresh_hz"].items()},
         )
         step_ms = float(self.cfg["eval"]["step_ms"])
+        lif_params = LIFParams.from_dict(self.cfg.get("lif", {}))
 
         if name == "random":
             ctrl = RandomController(p=float(self.cfg["eval"]["random_p"]))
@@ -84,7 +85,7 @@ class ControllerManager:
             for k in io_sub.output_groups:
                 io_sub.output_groups[k] = np.array([full_to_sub[i] for i in io_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
 
-            brain_core = Brian2Brain(sub_conn, LIFParams())
+            brain_core = Brian2Brain(sub_conn, lif_params)
             ctrl = BrainController(brain_core, Encoder(io_sub, enc_cfg), Decoder(io_sub, dec_cfg), step_ms=step_ms)
             io_spec = io_sub
 
@@ -102,7 +103,7 @@ class ControllerManager:
                 io_sub.output_groups[k] = np.array([full_to_sub[i] for i in io_spec.output_groups[k] if i in full_to_sub], dtype=np.int32)
 
             shuffled_sub = shuffle_connectome(sub_conn, seed=42, n_swaps_factor=5)
-            shuffled_brain = Brian2Brain(shuffled_sub, LIFParams())
+            shuffled_brain = Brian2Brain(shuffled_sub, lif_params)
             ctrl = BrainController(shuffled_brain, Encoder(io_sub, enc_cfg), Decoder(io_sub, dec_cfg), step_ms=step_ms)
             io_spec = io_sub
 
@@ -119,7 +120,7 @@ class ControllerManager:
             for k in vnc_io_sub.output_groups:
                 vnc_io_sub.output_groups[k] = np.array([full_to_sub_vnc[i] for i in vnc_spec.output_groups[k] if i in full_to_sub_vnc], dtype=np.int32)
 
-            vnc_brain = Brian2Brain(sub_vnc_conn, LIFParams())
+            vnc_brain = Brian2Brain(sub_vnc_conn, lif_params)
             pool = VNCMotorPool(vnc_io_sub, VNCConfig())
             ctrl = VNCBrainController(vnc_brain, Encoder(vnc_io_sub, enc_cfg), pool, step_ms=step_ms)
             io_spec = vnc_io_sub
@@ -137,7 +138,7 @@ class ControllerManager:
             for k in vnc_io_trained.output_groups:
                 vnc_io_trained.output_groups[k] = np.array([full_to_sub_vnc[i] for i in vnc_spec.output_groups[k] if i in full_to_sub_vnc], dtype=np.int32)
 
-            trained_brain_core = Brian2Brain(sub_vnc_conn, LIFParams())
+            trained_brain_core = Brian2Brain(sub_vnc_conn, lif_params)
             chk_path = Path("data/checkpoints/trained_brain.npz")
             if chk_path.exists():
                 plast = RSTDPPlasticity(trained_brain_core)

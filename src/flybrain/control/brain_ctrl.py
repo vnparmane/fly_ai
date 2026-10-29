@@ -25,8 +25,8 @@ class BrainController:
         self.last_rates = {"move_left": 0.0, "move_right": 0.0, "fire": 0.0}
         self.last_action = np.zeros(3, dtype=np.int8)
 
-    def reset(self, seed: int) -> None:
-        self.brain.reset(seed)
+    def reset(self, seed: int, reset_weights: bool = False) -> None:
+        self.brain.reset(seed, reset_weights=reset_weights)
         self.decoder.reset()
         self.last_batch = None
         self.last_rates = {"move_left": 0.0, "move_right": 0.0, "fire": 0.0}

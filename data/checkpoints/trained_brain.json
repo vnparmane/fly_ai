@@ -2,31 +2,101 @@
   {
     "episode": 1,
     "seed": 1000,
-    "kills": 13,
-    "score": 1300,
+    "kills": 15,
+    "score": 1500,
     "steps": 600,
-    "cumulative_reward": 41.22,
+    "cumulative_reward": 43.94,
     "total_weight_delta_l1": 3.7607,
-    "wall_s": 67.71
+    "wall_s": 95.33
   },
   {
     "episode": 2,
     "seed": 1001,
-    "kills": 16,
-    "score": 1600,
+    "kills": 17,
+    "score": 1700,
     "steps": 600,
-    "cumulative_reward": 42.86,
-    "total_weight_delta_l1": 7.5211,
-    "wall_s": 73.41
+    "cumulative_reward": 43.65,
+    "total_weight_delta_l1": 3.7604,
+    "wall_s": 96.31
   },
   {
     "episode": 3,
     "seed": 1002,
-    "kills": 10,
-    "score": 1000,
-    "steps": 342,
-    "cumulative_reward": 25.61,
-    "total_weight_delta_l1": 11.2818,
-    "wall_s": 41.15
+    "kills": 16,
+    "score": 1600,
+    "steps": 600,
+    "cumulative_reward": 42.83,
+    "total_weight_delta_l1": 3.7598,
+    "wall_s": 96.15
+  },
+  {
+    "episode": 4,
+    "seed": 1003,
+    "kills": 15,
+    "score": 1500,
+    "steps": 600,
+    "cumulative_reward": 43.93,
+    "total_weight_delta_l1": 3.7607,
+    "wall_s": 94.6
+  },
+  {
+    "episode": 5,
+    "seed": 1004,
+    "kills": 7,
+    "score": 700,
+    "steps": 227,
+    "cumulative_reward": 17.41,
+    "total_weight_delta_l1": 3.2185,
+    "wall_s": 36.19
+  },
+  {
+    "episode": 6,
+    "seed": 1005,
+    "kills": 0,
+    "score": 0,
+    "steps": 495,
+    "cumulative_reward": 23.8,
+    "total_weight_delta_l1": 3.3939,
+    "wall_s": 77.71
+  },
+  {
+    "episode": 7,
+    "seed": 1006,
+    "kills": 0,
+    "score": 0,
+    "steps": 600,
+    "cumulative_reward": 29.45,
+    "total_weight_delta_l1": 3.7223,
+    "wall_s": 91.65
+  },
+  {
+    "episode": 8,
+    "seed": 1007,
+    "kills": 0,
+    "score": 0,
+    "steps": 348,
+    "cumulative_reward": 16.57,
+    "total_weight_delta_l1": 3.3289,
+    "wall_s": 52.64
+  },
+  {
+    "episode": 9,
+    "seed": 1008,
+    "kills": 0,
+    "score": 0,
+    "steps": 594,
+    "cumulative_reward": 28.65,
+    "total_weight_delta_l1": 3.3068,
+    "wall_s": 90.98
+  },
+  {
+    "episode": 10,
+    "seed": 1009,
+    "kills": 0,
+    "score": 0,
+    "steps": 493,
+    "cumulative_reward": 23.71,
+    "total_weight_delta_l1": 3.3635,
+    "wall_s": 80.27
   }
 ]

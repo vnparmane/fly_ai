@@ -20,6 +20,23 @@ class LIFParams:
     w_syn_mv: float = 0.275
     poisson_weight_scale: float = 250.0  # f_poi in Shiu repo (250 * w_syn)
 
+    @classmethod
+    def from_dict(cls, d: dict) -> "LIFParams":
+        """Instantiate LIFParams from a dictionary, ignoring unknown keys."""
+        import dataclasses
+        fields = {f.name for f in dataclasses.fields(cls)}
+        filtered = {k: float(v) for k, v in d.items() if k in fields}
+        return cls(**filtered)
+
+    @classmethod
+    def from_yaml(cls, path) -> "LIFParams":
+        """Instantiate LIFParams directly from a YAML configuration file."""
+        from pathlib import Path
+        import yaml
+        with open(Path(path), "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+        return cls.from_dict(cfg.get("lif", {}))
+
 
 @dataclass
 class SpikeBatch:
@@ -34,7 +51,7 @@ class SpikingBrain(Protocol):
     """Abstract protocol for backend-agnostic whole-brain spiking simulations."""
     n_neurons: int
 
-    def reset(self, seed: int) -> None:
+    def reset(self, seed: int, reset_weights: bool = False) -> None:
         """Reset internal potentials and state variables to resting state with seed."""
         ...
 

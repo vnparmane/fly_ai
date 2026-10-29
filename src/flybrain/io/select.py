@@ -102,11 +102,17 @@ def select_io(conn: Connectome, cfg: dict) -> IOSpec:
     cand_in_left = candidate_inputs(conn, "left")
     cand_in_right = candidate_inputs(conn, "right")
 
-    # Select top_k inputs for left and right
+    # Disjoint sensory input groups:
+    # input_left: top_k left visual projection neurons
+    # input_right: top_k right visual projection neurons
+    # input_aligned: non-overlapping bilateral sample drawn from left and right pools beyond top_k
+    k_aligned = min(top_k // 2, max(0, len(cand_in_left) - top_k), max(0, len(cand_in_right) - top_k))
     input_left = cand_in_left[: min(top_k, len(cand_in_left))]
     input_right = cand_in_right[: min(top_k, len(cand_in_right))]
-    # enemy_aligned: bilateral sample from center/both eyes
-    input_aligned = np.concatenate([input_left[: top_k // 2], input_right[: top_k // 2]])
+    input_aligned = np.concatenate([
+        cand_in_left[top_k : top_k + k_aligned],
+        cand_in_right[top_k : top_k + k_aligned],
+    ])
 
     # 2. Forward influence of sensory inputs
     inf_left = influence(conn, input_left, max_hops=4, decay=0.5)

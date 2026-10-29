@@ -46,6 +46,15 @@ def test_influence_computation(conn):
 
 
 def test_io_groups_disjoint(io_spec):
+    # Input groups must be pairwise disjoint
+    in_left = set(io_spec.input_groups["enemy_left"])
+    in_right = set(io_spec.input_groups["enemy_right"])
+    in_aligned = set(io_spec.input_groups["enemy_aligned"])
+
+    assert len(in_left.intersection(in_right)) == 0, "enemy_left and enemy_right overlap"
+    assert len(in_left.intersection(in_aligned)) == 0, "enemy_left and enemy_aligned overlap"
+    assert len(in_right.intersection(in_aligned)) == 0, "enemy_right and enemy_aligned overlap"
+
     # Output groups must be pairwise disjoint
     out_left = set(io_spec.output_groups["move_left"])
     out_right = set(io_spec.output_groups["move_right"])
